@@ -25,12 +25,6 @@ class Scraper:
     # creates a logging file
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s :: %(levelname)s :: %(message)s')
-
-    file_handler = RotatingFileHandler(datetime.now().strftime('scraper_%H_%M_%S_%d_%m_%Y-debug.log'), mode='w')
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
 
     def __init__(self, csv_file, save_directory, interface, options):
         self.csv_file = csv_file
@@ -43,6 +37,13 @@ class Scraper:
         self.patent_list = []  # our list of patent
         self.failed_url = []
 
+        os.makedirs(os.path.dirname(self.path + "/log/"), exist_ok=True)
+        formatter = logging.Formatter('%(asctime)s :: %(levelname)s :: %(message)s')
+        file_handler = RotatingFileHandler(self.path + '/log/' +
+                                           datetime.now().strftime('scraper_%H_%M_%S_%d_%m_%Y-debug.log'), mode='w')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
     def __get_all_data(self):
         """
         Iterates over all our patents and extract a DataFrame containing all their data
