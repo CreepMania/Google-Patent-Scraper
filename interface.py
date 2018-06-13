@@ -20,6 +20,7 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         super(ScraperApplication, self).__init__(parent)
         self.setupUi(self)
         self.actionOpen_File.triggered.connect(self.open_file)
+        self.actionSelect_Direcory.triggered.connect(self.open_directory)
         self.SelectFile.clicked.connect(self.open_file)
         self.SelectDirectory.clicked.connect(self.open_directory)
         self.startButton.clicked.connect(self.start_scraping)
@@ -33,7 +34,6 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
     def open_file(self):
         """Creates a window to select a file in the explorer"""
         options = QtWidgets.QFileDialog.Options()
-        #options |= QtWidgets.QFileDialog.DontUseNativeDialog
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(None, "Open CSV File", "",
                                                             "CSV Files (*.csv)", options=options)
         if fileName:
@@ -42,8 +42,8 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
     def open_directory(self):
         """Creates a window to select a folder in the explorer"""
         directory = QtWidgets.QFileDialog.getExistingDirectory(parent=None,
-                                                               caption='Open backup directory',
-                                                               options=QtWidgets.QFileDialog.ShowDirsOnly)
+                                                               caption='Open backup directory')
+
         if directory:
             self.directoryPath.setText(directory)
 
@@ -192,7 +192,7 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 raise FileNotFoundError
             if not self.txt_char.text():
                 raise Exception
-            if not path.isdir(self.directoryPath.text()):
+            if path.isfile(self.directoryPath.text()):
                 raise NotADirectoryError
 
             file = ReadFile(filepath).data_frame
@@ -206,7 +206,7 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
             thread_count = self.get_nb_threads()
 
             self.progressBar.setValue(0)
-            pool = ThreadPool(thread_count)
+            self.pool = ThreadPool(thread_count)
 
             self.label_status.setText('Scraping... ({}/{})'.format(self.nb_scraped, self.MAX_LEN))
             self.label_status.setMinimumWidth(len(self.label_status.text()) * 10)
@@ -215,9 +215,9 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
             self.progressBar.setValue(0)
 
             try:
-                pool.map(scraper.scrape, scraper.links)
-                pool.close()
-                pool.join()
+                self.pool.map(scraper.scrape, scraper.links)
+                self.pool.close()
+                self.pool.join()
                 for link in scraper.failed_url:
                     scraper.scrape(link)
 
@@ -241,17 +241,17 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
 
                 if self.get_all_options().get('download_pdf'):
                     if thread_count == 1:
-                        pool = ThreadPool(1)
+                        self.pool = ThreadPool(1)
                     else:
-                        pool = ThreadPool(thread_count * 10)
+                        self.pool = ThreadPool(thread_count * 10)
 
                     self.nb_pdf = 1
                     self.label_status.setText('Downloading PDF... ({}/{})'.format(self.nb_pdf, len(pdf_list)))
                     self.label_status.setMinimumWidth(len(self.label_status.text()) * 10)
                     self.progressBar.setValue(0)
 
-                    pool.map(scraper.download_pdf, pdf_list)
-                    pool.close()
+                    self.pool.map(scraper.download_pdf, pdf_list)
+                    self.pool.close()
 
                 scraper.logger.info('DONE')
                 self.label_status.setText('Done.')
@@ -262,7 +262,7 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 self.job_done(done)
 
             except (ConnectionError, Exception) as msg:
-                pool.close()
+                self.pool.close()
                 print(msg)
                 print("Scraper process terminated, please try again")
                 self.err_render(msg)
@@ -292,6 +292,9 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 self.empty_csv_delimiter()
             elif not self.txt_nb_cores.text():
                 self.empty_nb_cores()
+
+    def stop(self):
+        self.pool.terminate()
 
     def _empty_path_err(self):
         """Creates an error window if the Path is empty"""

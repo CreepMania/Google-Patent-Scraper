@@ -22,6 +22,7 @@ class Scraper:
     It stores a list of Patent objects as well as all the html pages
     """
 
+    # creates a logging file
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s :: %(levelname)s :: %(message)s')
@@ -230,14 +231,14 @@ class Scraper:
             # always calls the scraping for the citations, just to get the number of citations per patent
             option = self.options.get('scrape_citations')
             self.logger.info('Patent ID: ' + current_ID + ', Scraper citations= ' + str(option))
-            patent.citations.get_given_citations(soup, option, current_ID)
+            patent.citations.get_given_citations(soup, option)
             patent.nb_given_citations = patent.citations.nb_given
             self.logger.info(
                 'Patent ID: ' + current_ID + ', number of citations found: ' + str(patent.nb_given_citations))
 
             option = self.options.get('scrape_cited')
             self.logger.info('Patent ID: ' + current_ID + ', Scrape cited= ' + str(option))
-            patent.citations.get_received_citations(soup, option, current_ID)
+            patent.citations.get_received_citations(soup, option)
             patent.nb_received_citations = patent.citations.nb_received
             self.logger.info('Patent ID: ' + current_ID + ', number of cited patents found: '
                              + str(patent.nb_received_citations))
@@ -247,7 +248,7 @@ class Scraper:
                              ' Scrape similar documents=' + str(self.options.get('scrape_similar')))
 
             if self.options.get('scrape_similar'):
-                patent.citations.get_similar_documents(soup, current_ID)
+                patent.citations.get_similar_documents(soup)
 
             self.patent_list.append(patent)  # adding the patent to the list
             text = 'Scraping... ({}/{})'.format(self.interface.nb_scraped, self.interface.MAX_LEN)
@@ -277,7 +278,6 @@ class Scraper:
         """
         content = None
         chrome_options = webdriver.ChromeOptions()
-
         chrome_options.add_argument('--no-sandbox')
         chrome_options.set_headless(headless=True)
 
@@ -625,7 +625,7 @@ class Citations:
         self.nb_received = 0
         self.logger = logger
 
-    def get_given_citations(self, soup, option, id):
+    def get_given_citations(self, soup, option):
         """
         Uses BeautifulSoup to scrape our cited patents
         :param soup: BeautifulSoup object, returned from our _get_next_soup method
@@ -633,33 +633,58 @@ class Citations:
                  -None if nothing found
         """
         try:
-            out_givencitations = []  # buffer array that contains the given citations
+            out_givencitations = {}  # buffer array that contains the given citations
             """
             all of them are contained under a title named patentCitations
             here we use a sibling of sibling because the first one is the '\n'
             """
+
+            ids = []
+            priority_dates = []
+            publication_dates = []
+            assignees = []
+            titles = []
+            all = []
+
             cit = soup.find('h3', id='patentCitations').next_sibling.next_sibling
 
             if len(cit) != 0:
                 # looking for the specific rows that store the ID of the patent
 
+                for y in cit.find_all(class_="td style-scope patent-result"):
+                    all.append(re.sub('\n+', '', y.get_text()))
+
                 for x in cit.find_all(attrs={'data-result': compile('patent/')}):
-                    out_givencitations.append(x.get_text())
+                    ids.append(x.get_text())
                     self.nb_given += 1
 
+                for i in range(0, len(all), 4):
+                    priority_dates.append(str(all[i]))
+
+                for i in range(1, len(all), 4):
+                    publication_dates.append(str(all[i]))
+
+                for i in range(2, len(all), 4):
+                    assignees.append(str(all[i]))
+
+                for i in range(3, len(all), 4):
+                    titles.append(str(all[i]))
+
+                out_givencitations.update({'ids': ids,
+                                           'priority_dates': priority_dates,
+                                           'publication_dates': publication_dates,
+                                           'assignees': assignees,
+                                           'titles': titles})
+
                 if option:
-                    # storing the result into the dictionary
-                    self.logger.info('Patent ID: ' + id + ', Cited Patents found')
                     self.given.update({self.patent_id: out_givencitations})
-                else:
-                    pass
 
         except AttributeError:  # if there is no citations 'find_all' will raise an AttributeError exception
-            self.logger.info('Patent ID: ' + id + ', no Cited Patents found')
+            self.logger.info('Patent ID: ' + self.patent_id + ', no Cited Patents found')
             print('No cited patents found')
             return None
 
-    def get_received_citations(self, soup, option, id):
+    def get_received_citations(self, soup, option):
         """
         Uses BeautifulSoup to scrape our cited patents
         :param soup: BeautifulSoup object, returned from our _get_next_soup method
@@ -667,35 +692,60 @@ class Citations:
                  -None if nothing found
         """
         try:
-            out_receivedcitations = []  # buffer array that contains the received citations
+            out_receivedcitations = {}  # buffer array that contains the received citations
 
             """
             all of them are contained under a title named citedBy
             here we use a sibling of sibling because the first sibling is the '\n'
             """
+
+            ids = []
+            priority_dates = []
+            publication_dates = []
+            assignees = []
+            titles = []
+            all = []
+
             cit = soup.find('h3', id='citedBy').next_sibling.next_sibling
 
             if len(cit) != 0:
 
+                for y in cit.find_all(class_="td style-scope patent-result"):
+                    all.append(re.sub('\n+', '', y.get_text()))
+
                 for x in cit.find_all(attrs={'data-result': compile('patent/')}):
-                    out_receivedcitations.append(x.get_text())
+                    ids.append(x.get_text())
                     self.nb_received += 1
 
+                for i in range(0, len(all), 4):
+                    priority_dates.append(str(all[i]))
+
+                for i in range(1, len(all), 4):
+                    publication_dates.append(str(all[i]))
+
+                for i in range(2, len(all), 4):
+                    assignees.append(str(all[i]))
+
+                for i in range(3, len(all), 4):
+                    titles.append(str(all[i]))
+
+                out_receivedcitations.update({'ids': ids,
+                                              'priority_dates': priority_dates,
+                                              'publication_dates': publication_dates,
+                                              'assignees': assignees,
+                                              'titles': titles})
+
                 if option:
-                    self.logger.info('Patent ID: ' + id + ', Citing Patents found')
                     self.received.update({self.patent_id: out_receivedcitations})
-                else:
-                    pass
 
         except AttributeError:
-            self.logger.info('Patent ID: ' + id + ', no Citing Patents found')
+            self.logger.info('Patent ID: ' + self.patent_id + ', no Citing Patents found')
             print('No citations found')
             return None
 
-    def get_similar_documents(self, soup, id):
+    def get_similar_documents(self, soup):
         try:
             out_similar_documents = {}  # buffer dict that contains the similar documents
-            links = []
             ids = []
             dates = []
             titles = []
@@ -710,9 +760,6 @@ class Citations:
 
             if len(cit) != 0:
                 # looking for the specific rows that store the ID of the patent
-
-                for x in cit.find_all(attrs={'data-result': compile('patent/')}):
-                    links.append(x.get_text())
 
                 for y in cit.find_all(class_="td style-scope patent-result"):
                     all.append(re.sub('\n+', '', y.get_text()))
@@ -729,11 +776,11 @@ class Citations:
                 out_similar_documents.update({'ids': ids, 'dates': dates, 'titles': titles})
 
                 # storing the result into the dictionary
-                self.logger.info('Patent ID: ' + id + ', Similar documents found')
+                self.logger.info('Patent ID: ' + self.patent_id + ', Similar documents found')
                 self.similar_documents.update({self.patent_id: out_similar_documents})
 
         except AttributeError:
-            self.logger.info('Patent ID: ' + id + ', no Similar documents found')
+            self.logger.info('Patent ID: ' + self.patent_id + ', no Similar documents found')
             print('No similar documents found')
             return None
 
@@ -912,13 +959,25 @@ class Patent:
                 iter_citations = self.citations.given_items()
 
                 if not exists:
-                    write.writerow(['SOURCE', 'TARGET'])
+                    write.writerow(['SOURCE', 'TARGET', 'priority date', 'publication date', 'assignee', 'title'])
 
                 for citing, value in iter_citations:
                     if citing != 'SOURCE':
-                        for cited in value:  # gets rid of the - in the patent name from our original csv file
-                            write.writerow([citing.replace('-', ''),
-                                            cited.replace('-', '')])  # the citing patent is the scraped patent
+                        index = 0
+                        for cited in value.get('ids'):
+                            patent_id = str(citing).replace('-', '')
+                            priority_date = value.get('priority_dates')[index]
+                            publication_date = value.get('publication_dates')[index]
+                            assignee = value.get('assignees')[index]
+                            title = value.get('titles')[index]
+
+                            index += 1
+                            write.writerow([patent_id,
+                                            cited.replace('-', ''),
+                                            priority_date,
+                                            publication_date,
+                                            assignee,
+                                            title])
 
             citation_file.close()
 
@@ -938,14 +997,27 @@ class Patent:
                 iter_citations = self.citations.received_items()
 
                 if not exists:
-                    write.writerow(['SOURCE', 'TARGET'])
+                    write.writerow(['SOURCE', 'priority date', 'publication date', 'assignee', 'title', 'TARGET'])
 
                 for cited, value in iter_citations:
                     if cited != 'SOURCE':
-                        for citing in value:
-                            write.writerow(
-                                [citing.replace('-', ''),
-                                 cited.replace('-', '')])  # the cited patent is the scraped patent
+
+                        index = 0
+                        for citing in value.get('ids'):
+                            patent_id = cited.replace('-', '')
+                            priority_date = value.get('priority_dates')[index]
+                            publication_date = value.get('publication_dates')[index]
+                            assignee = value.get('assignees')[index]
+                            title = value.get('titles')[index]
+
+                            index += 1
+                            write.writerow([citing.replace('-', ''),
+                                            priority_date,
+                                            publication_date,
+                                            assignee,
+                                            title,
+                                            patent_id
+                                            ])
 
             citation_file.close()
 
