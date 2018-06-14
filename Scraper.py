@@ -44,6 +44,7 @@ class Scraper:
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
+
     def __get_all_data(self):
         """
         Iterates over all our patents and extract a DataFrame containing all their data
@@ -960,25 +961,28 @@ class Patent:
                 iter_citations = self.citations.given_items()
 
                 if not exists:
-                    write.writerow(['SOURCE', 'TARGET', 'priority date', 'publication date', 'assignee', 'title'])
+                    write.writerow(
+                        ['SOURCE', 'TARGET', 'priority date', 'publication date', 'assignee', 'title', 'url'])
 
                 for citing, value in iter_citations:
                     if citing != 'SOURCE':
                         index = 0
                         for cited in value.get('ids'):
                             patent_id = str(citing).replace('-', '')
+                            cited_id = cited.replace('-', '')
                             priority_date = value.get('priority_dates')[index]
                             publication_date = value.get('publication_dates')[index]
                             assignee = value.get('assignees')[index]
                             title = value.get('titles')[index]
-
+                            url = 'https://patents.google.com/patent/{}/'.format(cited_id)
                             index += 1
                             write.writerow([patent_id,
-                                            cited.replace('-', ''),
+                                            cited_id,
                                             priority_date,
                                             publication_date,
                                             assignee,
-                                            title])
+                                            title,
+                                            url])
 
             citation_file.close()
 
@@ -998,7 +1002,8 @@ class Patent:
                 iter_citations = self.citations.received_items()
 
                 if not exists:
-                    write.writerow(['SOURCE', 'priority date', 'publication date', 'assignee', 'title', 'TARGET'])
+                    write.writerow(
+                        ['SOURCE', 'priority date', 'publication date', 'assignee', 'title', 'url', 'TARGET'])
 
                 for cited, value in iter_citations:
                     if cited != 'SOURCE':
@@ -1006,17 +1011,19 @@ class Patent:
                         index = 0
                         for citing in value.get('ids'):
                             patent_id = cited.replace('-', '')
+                            citing_id = citing.replace('-', '')
                             priority_date = value.get('priority_dates')[index]
                             publication_date = value.get('publication_dates')[index]
                             assignee = value.get('assignees')[index]
                             title = value.get('titles')[index]
-
+                            url = "https://patents.google.com/patent/{}/".format(citing_id)
                             index += 1
-                            write.writerow([citing.replace('-', ''),
+                            write.writerow([citing_id,
                                             priority_date,
                                             publication_date,
                                             assignee,
                                             title,
+                                            url,
                                             patent_id
                                             ])
 
