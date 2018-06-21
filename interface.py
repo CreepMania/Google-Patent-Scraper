@@ -20,7 +20,7 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         super(ScraperApplication, self).__init__(parent)
         self.setupUi(self)
         self.actionOpen_File.triggered.connect(self.open_file)
-        self.actionSelect_Direcory.triggered.connect(self.open_directory)
+        self.actionSelect_Directory.triggered.connect(self.open_directory)
         self.SelectFile.clicked.connect(self.open_file)
         self.SelectDirectory.clicked.connect(self.open_directory)
         self.startButton.clicked.connect(self.start_scraping)
@@ -29,7 +29,10 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         self.radio_scrape_all.toggled.connect(self.check_scrape_items)
         self.nb_scraped = 1
         self.nb_pdf = 1
+        self.nb_figures = 1
         self.MAX_LEN = 0
+        self.pdf_list = []
+        self.figures_list = []
 
     def open_file(self):
         """Creates a window to select a file in the explorer"""
@@ -57,6 +60,8 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         self.check_scrape_similar.setChecked(checked)
         self.check_scrape_legal.setChecked(checked)
         self.check_PDF.setChecked(checked)
+        self.check_figures.setChecked(checked)
+        self.check_scrape_nonpatent.setChecked(checked)
 
         self.check_scrape_classifications.setEnabled(not checked)
         self.check_scrape_cited.setEnabled(not checked)
@@ -64,6 +69,8 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         self.check_scrape_similar.setEnabled(not checked)
         self.check_scrape_legal.setEnabled(not checked)
         self.check_PDF.setEnabled(not checked)
+        self.check_figures.setEnabled(not checked)
+        self.check_scrape_nonpatent.setEnabled(not checked)
 
     def check_concatenate_all(self):
         """Selects all the checkboxes if the All options is checked and disables them"""
@@ -154,11 +161,13 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                         'scrape_cited': self.check_scrape_cited.isChecked(),
                         'scrape_similar': self.check_scrape_similar.isChecked(),
                         'scrape_legal': self.check_scrape_legal.isChecked(),
-                        'scrape_classifications': self.check_scrape_classifications.isChecked()})
+                        'scrape_classifications': self.check_scrape_classifications.isChecked(),
+                        'scrape_nonpatent': self.check_scrape_nonpatent.isChecked()})
         options.update({'separate_files': self.check_separate_yes.isChecked()})
         options.update({'language': self.radio_english.isChecked()})
         options.update({'concatenate': self.option_concatenate_txt()})
         options.update({'download_pdf': self.check_PDF.isChecked()})
+        options.update({'download_figures': self.check_figures.isChecked()})
         options.update({'csv_delimiter': self.txt_char.text()})
 
         return options
@@ -234,10 +243,10 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 else:
                     print("Cannot save files. \n " + str(msg))
 
-                pdf_list = []
+                self.pdf_list = []
                 for patent in scraper.patent_list:
                     if patent.pdf_link is not None:
-                        pdf_list.append(patent.pdf_link)
+                        self.pdf_list.append(patent.pdf_link)
 
                 if self.get_all_options().get('download_pdf'):
                     if thread_count == 1:
@@ -246,13 +255,34 @@ class ScraperApplication(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                         self.pool = ThreadPool(thread_count * 10)
 
                     self.nb_pdf = 1
-                    self.label_status.setText('Downloading PDF... ({}/{})'.format(self.nb_pdf, len(pdf_list)))
+                    self.label_status.setText('Downloading PDF... ({}/{})'.format(self.nb_pdf, len(self.pdf_list)))
                     self.label_status.setMinimumWidth(len(self.label_status.text()) * 10)
                     self.progressBar.setValue(0)
-
-                    self.pool.map(scraper.download_pdf, pdf_list)
+                    self.progressBar.setMaximum(len(self.pdf_list))
+                    self.pool.map(scraper.download_pdf, self.pdf_list)
                     self.pool.close()
 
+                self.figures_list = []
+                for patent in scraper.patent_list:
+                    if patent.figure_link is not None and patent.figure_link is not '':
+                        self.figures_list.append(patent.patent_id + '#' + patent.figure_link)
+
+                if self.get_all_options().get('download_figures'):
+                    if thread_count == 1:
+                        self.pool = ThreadPool(1)
+                    else:
+                        self.pool = ThreadPool(thread_count * 10)
+
+                    self.nb_pdf = 1
+                    self.label_status.setText(
+                        'Downloading figures... ({}/{})'.format(self.nb_pdf, len(self.figures_list)))
+                    self.label_status.setMinimumWidth(len(self.label_status.text()) * 10)
+                    self.progressBar.setValue(0)
+                    self.progressBar.setMaximum(len(self.figures_list))
+                    self.pool.map(scraper.download_figures, self.figures_list)
+                    self.pool.close()
+
+                self.progressBar.update()
                 scraper.logger.info('DONE')
                 self.label_status.setText('Done.')
                 self.label_status.setMinimumWidth(len(self.label_status.text()) * 10)

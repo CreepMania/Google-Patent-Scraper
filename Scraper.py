@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import re
+import mimetypes
 from csv import writer
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -97,6 +98,7 @@ class Scraper:
             'scrape_citations': BOOLEAN,
             'scrape_cited': BOOLEAN,
             'scrape_similar': BOOLEAN,
+            'scrape_nonpatent': BOOLEAN,
             'scrape_legal': BOOLEAN,
             'scrape_classifications': BOOLEAN,
             'separate_files': BOOLEAN,
@@ -108,6 +110,7 @@ class Scraper:
                 'CLAIMS': BOOLEAN
             },
             'download_pdf': BOOLEAN,
+            'download_figures': BOOLEAN,
             'csv_delimiter': CHAR
         }
         """
@@ -125,6 +128,7 @@ class Scraper:
             This looks into the csv file for all the data that doesnt need to be scraped
             It also standardizes the patent id
             """
+
             try:
                 for key, value in temp.items():
                     value = str(value.get(self.links.index(url)))
@@ -135,7 +139,7 @@ class Scraper:
 
             except Exception as msg:
                 self.logger.exception(str(msg))
-                print(msg)
+                print('Not found :' + str(msg))
 
             try:
                 current_ID = data['id']
@@ -160,38 +164,44 @@ class Scraper:
             self.logger.info(
                 'Patent ID: ' + current_ID + " Scrape abstract=" + str(self.options.get('scrape_abstract')))
 
-            if self.options.get('scrape_abstract'):
+            if self.options.get('scrape_abstract') or self.options.get('separate_files'):
                 data['abstract'] = self.__get_abstract(soup, english, current_ID)
+            else:
+                data['abstract'] = ''
 
-                # adds a Y/N column in the final csv file depending on if there is an abstract or not
-                # we have the same column for the description and claims as well
-                if not data['abstract']:
-                    data['ABSTRACT'] = 'N'
-                else:
-                    data['ABSTRACT'] = 'Y'
+            # adds a Y/N column in the final csv file depending on if there is an abstract or not
+            # we have the same column for the description and claims as well
+            if not data['abstract']:
+                data['ABSTRACT'] = 'N'
+            else:
+                data['ABSTRACT'] = 'Y'
 
             # DESCRIPTION
             self.logger.info(
                 'Patent ID: ' + current_ID + " Scrape description=" + str(self.options.get('scrape_description')))
 
-            if self.options.get('scrape_description'):
+            if self.options.get('scrape_description') or self.options.get('separate_files'):
                 data['description'] = self.__get_description(soup, english, current_ID)
+            else:
+                data['description'] = ''
 
-                if not data['description']:
-                    data['DESCRIPTION'] = 'N'
-                else:
-                    data['DESCRIPTION'] = 'Y'
+            if not data['description']:
+                data['DESCRIPTION'] = 'N'
+            else:
+                data['DESCRIPTION'] = 'Y'
 
             # CLAIMS
             self.logger.info('Patent ID: ' + current_ID + " Scrape claims=" + str(self.options.get('scrape_claims')))
 
-            if self.options.get('scrape_claims'):
+            if self.options.get('scrape_claims') or self.options.get('separate_files'):
                 data['claims'] = self.__get_claims(soup, english, current_ID)
+            else:
+                data['claims'] = ''
 
-                if not data['claims']:
-                    data['CLAIMS'] = 'N'
-                else:
-                    data['CLAIMS'] = 'Y'
+            if not data['claims']:
+                data['CLAIMS'] = 'N'
+            else:
+                data['CLAIMS'] = 'Y'
 
             # CLASSIFICATIONS
             self.logger.info(
@@ -207,12 +217,6 @@ class Scraper:
 
             if self.options.get('scrape_legal'):
                 data['legal_events'] = self.__get_legal_events(soup, current_ID)
-
-            # TITLE
-            self.logger.info('Patent ID: ' + current_ID + ", Scrape title=" + str(self.options.get('scrape_title')))
-
-            if not self.options.get('scrape_title'):
-                data['title'] = ''
 
             # TYPE OF PATENT
             data['type'] = self.__get_type(soup)
@@ -244,6 +248,11 @@ class Scraper:
             patent.nb_received_citations = patent.citations.nb_received
             self.logger.info('Patent ID: ' + current_ID + ', number of cited patents found: '
                              + str(patent.nb_received_citations))
+
+            option = self.options.get('scrape_nonpatent')
+            if option:
+                self.logger.info('Patent ID: ' + current_ID + ', Scrape Non-patent citations= ' + str(option))
+                patent.citations.get_nonpatent_citations(soup)
 
             # SIMILAR DOCUMENTS
             self.logger.info('Patent ID: ' + current_ID +
@@ -342,7 +351,7 @@ class Scraper:
             resp.release_conn()
 
             self.interface.nb_pdf += 1
-            text = 'Downloading PDF... ({}/{})'.format(self.interface.nb_pdf, self.interface.MAX_LEN)
+            text = 'Downloading PDF... ({}/{})'.format(self.interface.nb_pdf, len(self.interface.pdf_list))
             print('Downloading :' + url)
             self.interface.add_increment(text)
 
@@ -352,6 +361,43 @@ class Scraper:
             print(msg)
             print('Trying again...')
             self.download_pdf(url)
+
+    def download_figures(self, id_url):
+        """
+        Creates our download folder if not already existing
+        Downloads the pdf file
+        :param id_url: string containing the id and url of patent : ID#URL
+        """
+
+        id = id_url.split('#')[0]
+        url = id_url.split('#')[1]
+
+        try:
+            self.logger.info('Downloading figure: ' + url)
+
+            dirpath = self.path + '/FIGURES/'
+            os.makedirs(os.path.dirname(dirpath), exist_ok=True)  # creates our destination folder
+
+            connection_pool = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
+            resp = connection_pool.request('GET', url)
+
+            if resp.status == 200:
+                with open(dirpath + id + '.png', 'wb') as f:
+                    f.write(resp.data)
+                    f.close()
+                resp.release_conn()
+
+            self.interface.nb_figures += 1
+            text = 'Downloading figures... ({}/{})'.format(self.interface.nb_figures, len(self.interface.figures_list))
+            print('Downloading :' + url)
+            self.interface.add_increment(text)
+
+        except Exception as msg:
+            self.logger.exception('Cannot download figure: ' + url + str(msg))
+            print('Cannot download figure: ' + url)
+            print(msg)
+            print('Trying again...')
+            self.download_figures(url)
 
     def __get_pdf_link(self, soup, id):
         """
@@ -371,9 +417,8 @@ class Scraper:
                 return url
 
         except Exception as msg:
-            self.logger.info("Patent ID: " + id + ", no PDF link found \n" + str(msg))
+            self.logger.info("Patent ID: " + id + ", no PDF link found \n")
             print('No PDF link found')
-            print(msg)
 
     def __get_abstract(self, soup, english, id):
         """
@@ -621,6 +666,7 @@ class Citations:
     def __init__(self, patent_id, logger):
         self.given = {'SOURCE': 'TARGET'}
         self.received = {'SOURCE': 'TARGET'}
+        self.non_patent = {'SOURCE': 'TARGET'}
         self.similar_documents = {'SOURCE': 'TARGET'}
         self.patent_id = patent_id
         self.nb_given = 0
@@ -745,6 +791,37 @@ class Citations:
             print('No citations found')
             return None
 
+    def get_nonpatent_citations(self, soup):
+        """
+        Uses BeautifulSoup to scrape our cited patents
+        :param soup: BeautifulSoup object, returned from our _get_next_soup method
+        :return: -String containing our abstract if found
+                 -None if nothing found
+        """
+
+        try:
+            out_nonpatentcitations = []  # buffer string that contains the nonpatent citations
+
+            """
+            all of them are contained under a title named citedBy
+            here we use a sibling of sibling because the first sibling is the '\n'
+            """
+
+            cit = soup.find('h3', id='nplCitations').next_sibling.next_sibling
+
+            if len(cit) != 0:
+
+                for y in cit.find_all(class_="tr style-scope patent-result"):
+                    out_nonpatentcitations.append(re.sub('\n+', '', y.get_text()))
+
+                self.non_patent.update({self.patent_id: out_nonpatentcitations})
+                self.logger.info('Patent ID: ' + self.patent_id + ', Non-Patent citations found')
+
+        except AttributeError:
+            self.logger.info('Patent ID: ' + self.patent_id + ', no Non-Patent citations found')
+            print('No Non-Patent citations found')
+            return None
+
     def get_similar_documents(self, soup):
         try:
             out_similar_documents = {}  # buffer dict that contains the similar documents
@@ -805,6 +882,12 @@ class Patent:
         self.assignee = data['assignee']
         self.title = data['title']
         self.inventor = data['inventor/author']
+        try:
+            self.figure_link = data['representative figure link']
+        except:
+            self.figure_link = None
+            print('No representative figure link found')
+
         self.logger = logger
 
         try:
@@ -1062,8 +1145,32 @@ class Patent:
 
                 similar_documents_file.close()
 
+    def write_nonpatent_citations(self, dirpath):
+        if len(self.citations.similar_documents.keys()) != 1:
+            os.makedirs(os.path.dirname(dirpath), exist_ok=True)
+
+            exists = os.path.isfile(dirpath + '/' + 'nonpatent_citations.csv')
+
+            with open(dirpath + '/' + 'nonpatent_citations.csv', 'at', encoding='utf-8',
+                      newline='') as nonpatent_file:
+                write = writer(nonpatent_file)
+
+                if not exists:
+                    write.writerow(['SOURCE', 'TARGET'])
+
+                for citing, cited in self.citations.non_patent.items():
+                    if citing != 'SOURCE':
+                        citing = citing.replace('-', '')
+
+                        for content in cited:
+                            if content != 'Title':
+                                write.writerow([citing, content.strip(' ')])
+
+            nonpatent_file.close()
+
     def write_citations(self, dirpath):
         dirpath += '/CSV/'
         self.write_given_citations(dirpath)
         self.write_received_citations(dirpath)
         self.write_similar_documents(dirpath)
+        self.write_nonpatent_citations(dirpath)
