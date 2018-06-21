@@ -69,7 +69,7 @@ class Scraper:
         df = df[
             ["id", "title", "assignee", "inventor/author", "priority date", "filing/creation date", "publication date",
              "grant date", "link", "patent office", "type", "status", "nb_received_citations", "nb_given_citations",
-             "abstract", "description", "claims"]]
+             'nb_non_patent_citations', "abstract", "description", "claims"]]
 
         # uses the delimiter given by the user or a comma by default
         separator = self.options.get('csv_delimiter')
@@ -253,6 +253,7 @@ class Scraper:
             if option:
                 self.logger.info('Patent ID: ' + current_ID + ', Scrape Non-patent citations= ' + str(option))
                 patent.citations.get_nonpatent_citations(soup)
+                patent.nb_non_patent_citations = patent.citations.nb_non_patent
 
             # SIMILAR DOCUMENTS
             self.logger.info('Patent ID: ' + current_ID +
@@ -671,6 +672,7 @@ class Citations:
         self.patent_id = patent_id
         self.nb_given = 0
         self.nb_received = 0
+        self.nb_non_patent = 0
         self.logger = logger
 
     def get_given_citations(self, soup, option):
@@ -813,6 +815,7 @@ class Citations:
 
                 for y in cit.find_all(class_="tr style-scope patent-result"):
                     out_nonpatentcitations.append(re.sub('\n+', '', y.get_text()))
+                    self.nb_non_patent += 1
 
                 self.non_patent.update({self.patent_id: out_nonpatentcitations})
                 self.logger.info('Patent ID: ' + self.patent_id + ', Non-Patent citations found')
@@ -936,6 +939,7 @@ class Patent:
         self.citations = Citations(self.patent_id, self.logger)
         self.nb_received_citations = 0
         self.nb_given_citations = 0
+        self.nb_non_patent_citations = 0
 
     def claims(self):
         return self.claims
@@ -981,6 +985,7 @@ class Patent:
                 'patent office': self.patent_id[:2],
                 'nb_received_citations': self.nb_received_citations,
                 'nb_given_citations': self.nb_given_citations,
+                'nb_non_patent_citations': self.nb_non_patent_citations,
                 'abstract': self.found_abstract,
                 'description': self.found_description,
                 'claims': self.found_claims
@@ -1146,7 +1151,8 @@ class Patent:
                 similar_documents_file.close()
 
     def write_nonpatent_citations(self, dirpath):
-        if len(self.citations.similar_documents.keys()) != 1:
+
+        if len(self.citations.non_patent.keys()) != 1:
             os.makedirs(os.path.dirname(dirpath), exist_ok=True)
 
             exists = os.path.isfile(dirpath + '/' + 'nonpatent_citations.csv')
