@@ -129,6 +129,12 @@ Unzip the downloaded file into this directory :
 C:\Windows\
 ```
 
+## Known Issues
+The interface may not respond while working, this has no known incidence on the extraction of the data.
+
+While extracting massive numbers of patents, the process might randomly freeze. Unfortunately I have not been able to determine what causes it. I, myself, have never encountered this problem on Linux (Solus Budgie), but my client on macOS (High Sierra) faced it multiple times. I have not tested if this problem exists on Windows or not.
+If you encounter this problem, try to reduce the number of patents to extract.
+
 ## Author
 
 * **Guillaume Brocard** - French Student in Computer Science - [CreepMania](https://www.github.com/CreepMania) - [Linkedin](https://www.linkedin.com/in/guillaume-brocard/)
